@@ -1,51 +1,186 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <string.h>
+#include <ctype.h>
+#include <stddef.h>
 
 extern char **environ;
 
-char **splitter(char *str, const char *delim);
+#define MAX_ARGS 100
 
-char **pathfinder(void)
+char *trim_spaces(char *str);
+char *read_line(void);
+int parse_args(char *line, char **args);
+char *find_command(char *cmd);
+void execute_cmd(char **args);
+
+char *trim_spaces(char *str)
 {
-	int j = 0;
-	char *temp = NULL;
-	char **array = NULL;
+	char *end;
 
-	while (environ[j])
+	while (*str && isspace(*str))
+		str++;
+
+	if (*str == 0)
+		return (str);
+
+	end = str + strlen(str) - 1;
+	while (end > str && isspace(*end))
+		end--;
+
+	*(end + 1) = '\0';
+	return (str);
+}
+
+char *read_line(void)
+{
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t nread;
+
+	nread = getline(&line, &len, stdin);
+	if (nread == -1)
 	{
-		array = splitter(environ[j], "=");
-		if (array && !strcmp(array[0], "PATH"))
+		free(line);
+		return (NULL);
+	}
+	if (line[nread - 1] == '\n')
+		line[nread - 1] = '\0';
+
+	return (trim_spaces(line));
+}
+
+int parse_args(char *line, char **args)
+{
+	int i = 0;
+
+	args[i] = strtok(line, " ");
+	while (args[i] != NULL && i < MAX_ARGS - 1)
+	{
+		i++;
+		args[i] = strtok(NULL, " ");
+	}
+	return (i);
+}
+
+char *find_command(char *cmd)
+{
+	char *path_env = getenv("PATH");
+	char *path_copy, *token;
+	char full_path[1024];
+
+	if (!cmd)
+		return (NULL);
+
+	if (strchr(cmd, '/'))
+	{
+		if (access(cmd, X_OK) == 0)
+			return (cmd);
+		return (NULL);
+	}
+
+	if (!path_env)
+		return (NULL);
+
+	path_copy = strdup(path_env);
+	if (!path_copy)
+		return (NULL);
+
+	token = strtok(path_copy, ":");
+	while (token)
+	{
+		snprintf(full_path, sizeof(full_path), "%s/%s", token, cmd);
+		if (access(full_path, X_OK) == 0)
 		{
-			if (array[1])
-				temp = strdup(array[1]);
-			for (int i = 0; i < 2; i++)
-				free(array[i]);
-			free(array);
+			free(path_copy);
+			return (strdup(full_path));
+		}
+		token = strtok(NULL, ":");
+	}
+
+	free(path_copy);
+	return (NULL);
+}
+
+void execute_cmd(char **args)
+{
+	pid_t pid;
+	int status;
+	char *cmd_path;
+
+	if (!args[0])
+		return;
+
+	cmd_path = find_command(args[0]);
+	if (!cmd_path)
+	{
+		write(2, "Command not found\n", 18);
+		return;
+	}
+
+	pid = fork();
+	if (pid == -1)
+	{
+		perror("fork");
+		exit(EXIT_FAILURE);
+	}
+
+	if (pid == 0)
+	{
+		if (execve(cmd_path, args, environ) == -1)
+		{
+			perror("./hsh");
+			exit(EXIT_FAILURE);
+		}
+	}
+	else
+		wait(&status);
+
+	free(cmd_path);
+}
+
+void shell_loop(void)
+{
+	char *line;
+	char *args[MAX_ARGS];
+	int argc;
+
+	while (1)
+	{
+		if (isatty(STDIN_FILENO))
+			write(1, "$ ", 2);
+
+		line = read_line();
+		if (!line)
+		{
+			if (isatty(STDIN_FILENO))
+				write(1, "\n", 1);
 			break;
 		}
-		if (array)
+
+		if (*line == '\0')
 		{
-			for (int i = 0; i < 2; i++)
-				free(array[i]);
-			free(array);
+			free(line);
+			continue;
 		}
-		j++;
+
+		argc = parse_args(line, args);
+		if (argc == 0)
+		{
+			free(line);
+			continue;
+		}
+
+		execute_cmd(args);
+		free(line);
 	}
+}
 
-	if (!temp)
-		return NULL;
-
-	array = splitter(temp, ":");
-	for (int i = 0; array[i]; i++)
-	{
-		char *tmp = malloc(strlen(array[i]) + 2);
-		strcpy(tmp, array[i]);
-		strcat(tmp, "/");
-		free(array[i]);
-		array[i] = tmp;
-	}
-
-	free(temp);
-	return array;
+int main(void)
+{
+	shell_loop();
+	return (0);
 }
