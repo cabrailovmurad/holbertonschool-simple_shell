@@ -20,24 +20,22 @@ int main(void)
 
     while (1)
     {
-        /* display prompt only if interactive */
         if (isatty(STDIN_FILENO))
             write(1, "$ ", 2);
 
         nread = getline(&line, &len, stdin);
-        if (nread == -1) /* Ctrl+D or error */
+        if (nread == -1)
         {
             if (isatty(STDIN_FILENO))
                 write(1, "\n", 1);
             break;
         }
 
-        /* remove newline character */
         if (line[nread - 1] == '\n')
             line[nread - 1] = '\0';
 
         pid = fork();
-        if (pid == 0) /* child process */
+        if (pid == 0)
         {
             char *argv[2];
             argv[0] = line;
@@ -45,11 +43,11 @@ int main(void)
 
             if (execve(argv[0], argv, environ) == -1)
             {
-                perror("./hsh"); /* print error if command not found */
+                perror("./hsh");
                 exit(EXIT_FAILURE);
             }
         }
-        else if (pid > 0) /* parent process */
+        else if (pid > 0)
             wait(&status);
         else
         {
