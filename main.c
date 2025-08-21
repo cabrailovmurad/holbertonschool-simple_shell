@@ -12,6 +12,10 @@ int main(void)
     char *line = NULL;
     size_t len = 0;
     ssize_t nread;
+    pid_t pid;
+    int status;
+    char *cmd;
+    char *argv[2];
 
     while (1)
     {
@@ -29,12 +33,10 @@ int main(void)
         if (line[nread - 1] == '\n')
             line[nread - 1] = '\0';
 
-        char *cmd = strtok(line, " ");
+        cmd = strtok(line, " ");
         while (cmd != NULL)
         {
-            pid_t pid = fork();
-            int status;
-
+            pid = fork();
             if (pid == -1)
             {
                 perror("fork");
@@ -43,7 +45,8 @@ int main(void)
             }
             if (pid == 0)
             {
-                char *argv[] = {cmd, NULL};
+                argv[0] = cmd;
+                argv[1] = NULL;
                 if (execve(argv[0], argv, environ) == -1)
                 {
                     perror("./hsh");
