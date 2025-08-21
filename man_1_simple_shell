@@ -1,0 +1,11 @@
+.TH simple_shell 1
+.SH NAME
+simple_shell \- simple UNIX command interpreter
+.SH SYNOPSIS
+.B ./hsh
+.SH DESCRIPTION
+The simple_shell is a minimal UNIX command line interpreter.
+It supports executing programs via execve, handling the PATH,
+the built-in commands `exit` and `env`, and managing EOF (Ctrl+D).
+.SH AUTHOR
+Murad Cabrailov
