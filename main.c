@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <string.h>
 
 /**
  * display_prompt - prints the shell prompt
@@ -34,17 +35,54 @@ char *read_line(void)
 }
 
 /**
+ * split_line - splits a line into arguments
+ * @line: input command line
+ * Return: array of strings (arguments)
+ */
+char **split_line(char *line)
+{
+	char *token;
+	char **args;
+	int bufsize = 64, position = 0;
+
+	args = malloc(bufsize * sizeof(char *));
+	if (!args)
+	{
+		perror("malloc");
+		exit(EXIT_FAILURE);
+	}
+
+	token = strtok(line, " ");
+	while (token != NULL)
+	{
+		args[position++] = token;
+		if (position >= bufsize)
+		{
+			bufsize += 64;
+			args = realloc(args, bufsize * sizeof(char *));
+			if (!args)
+			{
+				perror("realloc");
+				exit(EXIT_FAILURE);
+			}
+		}
+		token = strtok(NULL, " ");
+	}
+	args[position] = NULL;
+	return (args);
+}
+
+/**
  * execute_command - forks and executes a command
- * @line: command to execute
+ * @line: command line input
  */
 void execute_command(char *line)
 {
 	pid_t pid;
 	int status;
-	char *argv[2];
+	char **argv;
 
-	argv[0] = line;
-	argv[1] = NULL;
+	argv = split_line(line);
 
 	pid = fork();
 	if (pid == 0)
@@ -59,10 +97,12 @@ void execute_command(char *line)
 		wait(&status);
 	else
 		perror("fork");
+
+	free(argv);
 }
 
 /**
- * main - simple shell that executes one command at a time
+ * main - simple shell that executes commands with arguments
  * Return: 0 on success
  */
 int main(void)
