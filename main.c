@@ -4,8 +4,30 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <string.h>
+#include <ctype.h>
 
 extern char **environ;
+
+#define MAX_ARGS 100
+
+/* Функция для удаления ведущих и конечных пробелов */
+char *trim_spaces(char *str)
+{
+    char *end;
+
+    while (*str && isspace(*str)) /* пропускаем ведущие пробелы */
+        str++;
+
+    if (*str == 0)
+        return str;
+
+    end = str + strlen(str) - 1;
+    while (end > str && isspace(*end)) /* убираем конечные пробелы */
+        end--;
+
+    *(end + 1) = '\0';
+    return str;
+}
 
 int main(void)
 {
@@ -14,8 +36,8 @@ int main(void)
     ssize_t nread;
     pid_t pid;
     int status;
-    char *cmd;
-    char *argv[2];
+    char *args[MAX_ARGS];
+    int i;
 
     while (1)
     {
@@ -33,32 +55,41 @@ int main(void)
         if (line[nread - 1] == '\n')
             line[nread - 1] = '\0';
 
-        cmd = strtok(line, " ");
-        while (cmd != NULL)
+        line = trim_spaces(line);
+
+        if (*line == '\0') /* пустая строка */
+            continue;
+
+        /* разбиваем строку на аргументы */
+        args[0] = strtok(line, " ");
+        if (args[0] == NULL)
+            continue;
+
+        for (i = 1; i < MAX_ARGS; i++)
         {
-            pid = fork();
-            if (pid == -1)
+            args[i] = strtok(NULL, " ");
+            if (args[i] == NULL)
+                break;
+        }
+
+        pid = fork();
+        if (pid == -1)
+        {
+            perror("fork");
+            free(line);
+            exit(EXIT_FAILURE);
+        }
+        if (pid == 0)
+        {
+            if (execve(args[0], args, environ) == -1)
             {
-                perror("fork");
-                free(line);
+                perror("./hsh");
                 exit(EXIT_FAILURE);
             }
-            if (pid == 0)
-            {
-                argv[0] = cmd;
-                argv[1] = NULL;
-                if (execve(argv[0], argv, environ) == -1)
-                {
-                    perror("./hsh");
-                    exit(EXIT_FAILURE);
-                }
-            }
-            else
-            {
-                wait(&status);
-            }
-
-            cmd = strtok(NULL, " ");
+        }
+        else
+        {
+            wait(&status);
         }
     }
 
