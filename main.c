@@ -5,6 +5,8 @@
 #include <sys/wait.h>
 #include <string.h>
 
+extern char **environ;
+
 /**
  * display_prompt - prints the shell prompt
  */
@@ -87,9 +89,9 @@ void execute_command(char *line)
 	pid = fork();
 	if (pid == 0)
 	{
-		if (execve(argv[0], argv, NULL) == -1)
+		if (execve(argv[0], argv, environ) == -1)
 		{
-			perror("./hsh");
+			perror(argv[0]);
 			exit(EXIT_FAILURE);
 		}
 	}
