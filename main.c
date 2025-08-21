@@ -3,13 +3,31 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <string.h>
+#include <ctype.h>
 
 extern char **environ;
 
-/**
- * main - simple shell 0.1
- * Return: 0 on success
- */
+/* Функция для удаления ведущих и конечных пробелов */
+char *trim_spaces(char *str)
+{
+    char *end;
+
+    while (isspace((unsigned char)*str))
+        str++;
+
+    if (*str == 0)
+        return str;
+
+    end = str + strlen(str) - 1;
+    while (end > str && isspace((unsigned char)*end))
+        end--;
+
+    *(end + 1) = '\0';
+
+    return str;
+}
+
 int main(void)
 {
     char *line = NULL;
@@ -34,13 +52,14 @@ int main(void)
         if (line[nread - 1] == '\n')
             line[nread - 1] = '\0';
 
+        char *cmd = trim_spaces(line);
+        if (cmd[0] == '\0')
+            continue;
+
         pid = fork();
         if (pid == 0)
         {
-            char *argv[2];
-            argv[0] = line;
-            argv[1] = NULL;
-
+            char *argv[] = {cmd, NULL};
             if (execve(argv[0], argv, environ) == -1)
             {
                 perror("./hsh");
@@ -48,7 +67,9 @@ int main(void)
             }
         }
         else if (pid > 0)
+        {
             wait(&status);
+        }
         else
         {
             perror("fork");
@@ -57,5 +78,5 @@ int main(void)
     }
 
     free(line);
-    return (0);
+    return 0;
 }
