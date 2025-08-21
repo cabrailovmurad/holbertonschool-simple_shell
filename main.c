@@ -111,11 +111,14 @@ int main(void)
 
 	while (1)
 	{
-		display_prompt();
+		if (isatty(STDIN_FILENO))
+			display_prompt();
+
 		line = read_line();
 		if (line == NULL)
 		{
-			printf("\n");
+			if (isatty(STDIN_FILENO))
+				printf("\n");
 			break;
 		}
 
