@@ -1,56 +1,95 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <string.h>
+#include <sys/types.h>
 #include <sys/wait.h>
+#include <string.h>
+#include <ctype.h>
 
-#define MAX_LINE 1024
+extern char **environ;
+
+#define MAX_ARGS 100
+
+/* Function to remove leading and trailing spaces */
+char *trim_spaces(char *str)
+{
+    char *end;
+
+    while (*str && isspace(*str))  /* skip leading spaces */
+        str++;
+
+    if (*str == 0)
+        return str;
+
+    end = str + strlen(str) - 1;
+    while (end > str && isspace(*end))  /* remove trailing spaces */
+        end--;
+
+    *(end + 1) = '\0';
+    return str;
+}
 
 int main(void)
 {
     char *line = NULL;
     size_t len = 0;
     ssize_t nread;
-    char *args[100];
+    pid_t pid;
+    int status;
+    char *args[MAX_ARGS];
     int i;
 
     while (1)
     {
-        write(1, "$ ", 2);
+        if (isatty(STDIN_FILENO))
+            write(1, "$ ", 2);
 
         nread = getline(&line, &len, stdin);
         if (nread == -1)
+        {
+            if (isatty(STDIN_FILENO))
+                write(1, "\n", 1);
             break;
+        }
 
         if (line[nread - 1] == '\n')
             line[nread - 1] = '\0';
 
-        i = 0;
-        args[i] = strtok(line, " ");
-        while (args[i] != NULL)
-            args[++i] = strtok(NULL, " ");
+        line = trim_spaces(line);
 
+        if (*line == '\0')  /* empty line */
+            continue;
+
+        /* split the line into arguments */
+        args[0] = strtok(line, " ");
         if (args[0] == NULL)
             continue;
 
-        if (strcmp(args[0], "exit") == 0)
-            break;
+        for (i = 1; i < MAX_ARGS; i++)
+        {
+            args[i] = strtok(NULL, " ");
+            if (args[i] == NULL)
+                break;
+        }
 
-        pid_t pid = fork();
+        pid = fork();
         if (pid == -1)
         {
             perror("fork");
-            continue;
+            free(line);
+            exit(EXIT_FAILURE);
         }
         if (pid == 0)
         {
-            execvp(args[0], args);
-            perror(args[0]);
-            exit(EXIT_FAILURE);
+            if (execve(args[0], args, environ) == -1)
+            {
+                perror("./hsh");
+                exit(EXIT_FAILURE);
+            }
         }
         else
         {
-            wait(NULL);
+            wait(&status);
         }
     }
 
