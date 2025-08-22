@@ -1,149 +1,139 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/wait.h>
+#include "shell.h"
 
-extern char **environ;
-
-#define MAX_ARGS 100
-
-char *read_line(void)
+/**
+ * get_path_value - get PATH from environ without using getenv
+ *
+ * Return: pointer to PATH string or NULL
+ */
+char *get_path_value(void)
 {
-	char *line = NULL;
-	size_t len = 0;
-	ssize_t nread;
+    int i = 0;
+    size_t len = 5;
 
-	nread = getline(&line, &len, stdin);
-	if (nread == -1)
-	{
-		free(line);
-		return NULL;
-	}
-	if (line[nread - 1] == '\n')
-		line[nread - 1] = '\0';
-	return line;
+    while (environ[i])
+    {
+        if (strncmp(environ[i], "PATH=", len) == 0)
+            return (environ[i] + len);
+        i++;
+    }
+    return (NULL);
 }
 
-char *trim_spaces(char *str)
-{
-	char *end;
-
-	while (*str && (*str == ' ' || *str == '\t'))
-		str++;
-	if (*str == 0)
-		return str;
-	end = str + strlen(str) - 1;
-	while (end > str && (*end == ' ' || *end == '\t'))
-		end--;
-	*(end + 1) = '\0';
-	return str;
-}
-
-char **parse_args(char *line)
-{
-	char **args = malloc(sizeof(char *) * (MAX_ARGS + 1));
-	int i = 0;
-	char *token;
-
-	if (!args)
-		return NULL;
-
-	token = strtok(line, " \t");
-	while (token != NULL && i < MAX_ARGS)
-	{
-		args[i++] = token;
-		token = strtok(NULL, " \t");
-	}
-	args[i] = NULL;
-	return args;
-}
-
+/**
+ * find_command - search for command in PATH
+ * @cmd: command to find
+ *
+ * Return: full path or NULL
+ */
 char *find_command(char *cmd)
 {
-	char *path = getenv("PATH");
-	char *path_copy, *dir;
-	char *fullpath = malloc(1024);
+    char *path, *path_copy, *dir, *full_path;
+    size_t len;
 
-	if (!fullpath)
-		return NULL;
+    path = get_path_value();
+    if (!path)
+        return (NULL);
 
-	if (strchr(cmd, '/'))
-	{
-		if (access(cmd, X_OK) == 0)
-			return strdup(cmd);
-		free(fullpath);
-		return NULL;
-	}
-	if (!path)
-	{
-		free(fullpath);
-		return NULL;
-	}
-	path_copy = strdup(path);
-	dir = strtok(path_copy, ":");
-	while (dir)
-	{
-		snprintf(fullpath, 1024, "%s/%s", dir, cmd);
-		if (access(fullpath, X_OK) == 0)
-		{
-			free(path_copy);
-			return fullpath;
-		}
-		dir = strtok(NULL, ":");
-	}
-	free(path_copy);
-	free(fullpath);
-	return NULL;
+    path_copy = strdup(path);
+    if (!path_copy)
+        return (NULL);
+
+    dir = strtok(path_copy, ":");
+    while (dir)
+    {
+        len = strlen(dir) + strlen(cmd) + 2;
+        full_path = malloc(len);
+        if (!full_path)
+        {
+            free(path_copy);
+            return (NULL);
+        }
+        snprintf(full_path, len, "%s/%s", dir, cmd);
+
+        if (access(full_path, X_OK) == 0)
+        {
+            free(path_copy);
+            return (full_path);
+        }
+        free(full_path);
+        dir = strtok(NULL, ":");
+    }
+    free(path_copy);
+    return (NULL);
 }
 
-void execute(char **args)
-{
-	char *cmd_path = find_command(args[0]);
-	pid_t pid;
-	int status;
-
-	if (!cmd_path)
-	{
-		write(2, "Command not found\n", 18);
-		return;
-	}
-	pid = fork();
-	if (pid == 0)
-	{
-		execve(cmd_path, args, environ);
-		perror("execve");
-		exit(EXIT_FAILURE);
-	}
-	else if (pid > 0)
-		waitpid(pid, &status, 0);
-	free(cmd_path);
-}
-
+/**
+ * main - simple shell
+ *
+ * Return: 0 on success
+ */
 int main(void)
 {
-	char *line;
-	char **args;
+    char *line = NULL, *args[64], *token, *cmd_path;
+    size_t len = 0;
+    ssize_t read;
+    pid_t pid;
+    int status, i;
 
-	while (1)
-	{
-		if (isatty(STDIN_FILENO))
-			write(1, "$ ", 2);
-		line = read_line();
-		if (!line)
-			break;
-		line = trim_spaces(line);
-		if (*line == '\0')
-		{
-			free(line);
-			continue;
-		}
-		args = parse_args(line);
-		if (args[0])
-			execute(args);
-		free(args);
-		free(line);
-	}
-	return 0;
+    while (1)
+    {
+        if (isatty(STDIN_FILENO))
+            write(STDOUT_FILENO, "$ ", 2);
+
+        read = getline(&line, &len, stdin);
+        if (read == -1)
+        {
+            free(line);
+            exit(0);
+        }
+        line[read - 1] = '\0';
+
+        if (strcmp(line, "exit") == 0)
+        {
+            free(line);
+            exit(0);
+        }
+
+        i = 0;
+        token = strtok(line, " ");
+        while (token != NULL && i < 63)
+        {
+            args[i++] = token;
+            token = strtok(NULL, " ");
+        }
+        args[i] = NULL;
+
+        if (args[0] == NULL)
+            continue;
+
+        if (access(args[0], X_OK) != 0)
+        {
+            cmd_path = find_command(args[0]);
+            if (cmd_path)
+                args[0] = cmd_path;
+            else
+            {
+                fprintf(stderr, "%s: command not found\n", args[0]);
+                continue;
+            }
+        }
+
+        pid = fork();
+        if (pid == 0)
+        {
+            if (execve(args[0], args, environ) == -1)
+                perror("execve");
+            exit(1);
+        }
+        else if (pid > 0)
+        {
+            waitpid(pid, &status, 0);
+        }
+        else
+        {
+            perror("fork");
+        }
+    }
+    free(line);
+    return (0);
 }
